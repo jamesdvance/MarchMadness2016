@@ -362,4 +362,4 @@ r6_extra <- rep(NA, times = (length(r1_winners)-length(r6_winners)))
 r6_winners <- c(r6_winners, r6_extra)
 final_result <- rbind(final_result, r6_winners)
 
-write.csv(final_result, "marchMadness_predictions2016")
+write.csv(final_result, "marchMadness_predictions2016.csv")
