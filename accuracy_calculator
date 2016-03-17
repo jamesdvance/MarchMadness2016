@@ -1,0 +1,43 @@
+# Returns accuacy and best threshold given a pred attribute to use with ensembles
+acu_calc_pred <-function(pred, true){
+  ac <- vector()
+  threshold <- vector()
+  #  Create prediction vector
+  
+  #  Calculate accuracy for threshold, .4, .5, .6, .7
+  #.4
+  pred_changed <- pred
+  pred_changed[pred_changed >= .4] <- 1
+  pred_changed[pred_changed < .4] <- 0
+  d <- cbind(pred_changed, true)
+  ac <- c(ac,sum(d[,1]==d[,2])/nrow(d))
+  threshold <- c(threshold,.4)
+  #.5 
+  
+  pred_changed <- pred
+  pred_changed[pred_changed >= .5] <- 1
+  pred_changed[pred_changed < .5] <- 0
+  d <- cbind(pred_changed, true)
+  ac <- c(ac,sum(d[,1]==d[,2])/nrow(d))
+  threshold <- c(threshold,.5)
+  # .6
+  pred_changed <- pred
+  pred_changed[pred_changed >= .6] <- 1
+  pred_changed[pred_changed < .6] <- 0
+  d <- cbind(pred_changed, true)
+  ac <- c(ac,sum(d[,1]==d[,2])/nrow(d))
+  threshold <- c(threshold,.6)
+  # .7
+  pred_changed <- pred
+  pred_changed[pred_changed >= .7] <- 1
+  pred_changed[pred_changed < .7] <- 0
+  d <- cbind(pred_changed, true)
+  ac <- c(ac,sum(d[,1]==d[,2])/nrow(d))
+  threshold <- c(threshold,.7)
+  
+  
+  # Returns a vector where the return_vec[1] gives the accuracy and return_vec[2]
+  # gives the threshold.
+  returned_vec <- c(max(ac),  round(threshold[match(max(ac),ac)],digits=2))
+  return(returned_vec)
+}
