@@ -1,0 +1,367 @@
+# 42Six Submission
+
+# check out Kaggle.com/jamesdvance for scripts related to this problem
+
+# This file contains the minimum code necessary to produce a bracket for March Madness. The other files
+# related to model selection and data wrangling are shared on github
+
+
+data_2016 <- read.csv("ave_2016.csv")
+
+# Reading in main dataset (pre-wrangled)
+
+total_data <- read.csv("total_data.csv")
+
+team_names <- read.csv("Teams.csv", stringsAsFactors = FALSE, header = TRUE)
+
+unnecessary <- c("team_id", "opp_team_id", "season", "team","opp_team", "diff")
+
+#Building Ensemble Model:
+# GLM: 
+# Training / Testing 2013
+train_2016 <- total_data[total_data$season < 2016,!names(total_data)%in%c(unnecessary)]
+test_2016 <- total_data[total_data$season == 2016,!names(total_data)%in%c(unnecessary)]
+
+glm_all_2016 <- glm(outcome ~ ., data = train_2016,family="binomial")
+glm_step_2016 <- step(glm_all_2016)
+
+glm_all_2016_pred <- predict(glm_all_2016, newdata=test_2016[,!(names(test_2016)%in%c("diff","outcome"))], type = "response")
+glm_step_2016_pred <- predict(glm_step_2016, newdata=test_2016[,!(names(test_2016)%in%c("diff","outcome"))], type = "response")
+
+svm_all_2016 <- svm(outcome~., data = train_2016)
+svm_2016_pred <- predict(svm_all_2016, newdata=test_2016[,!(names(test_2016)%in%c("diff","outcome"))], probability = TRUE)
+
+train_2016$outcome <- as.factor(train_2016$outcome)
+rf_all_2016 <- randomForest(outcome~., data=train_2016)
+
+rf_pred_2016_prob <- predict(rf_all_2016, newdata=test_2016[,!(names(test_2016)%in%c("diff","outcome"))], type = "prob")
+
+xgb_train_2016 <- train_2016
+xgb_train_2016$outcome <- as.numeric(as.character(xgb_train_2016$outcome))
+
+library("dummies")
+train_opp_conf_dum <- dummy(xgb_train_2016$opp_conf, data =NULL, sep="_")
+train_team_conf_dum <- dummy(xgb_train_2016$team_conf, data = NULL, sep = "_")
+
+xgb_train_2016 <- cbind(xgb_train_2016, train_opp_conf_dum, train_team_conf_dum)
+
+xgb_train_2016$opp_conf <- NULL
+xgb_train_2016$team_conf <- NULL
+
+xgb_test_2016 <- test_2016
+test_opp_conf_dum <- dummy(xgb_test_2016$opp_conf, data =NULL, sep="_")
+test_team_conf_dum <- dummy(xgb_test_2016$team_conf, data = NULL, sep = "_")
+
+xgb_test_2016 <- cbind(xgb_test_2016, test_opp_conf_dum, test_team_conf_dum)
+
+xgb_test_2016$opp_conf <- NULL
+xgb_test_2016$team_conf <- NULL
+
+xgb_train_mtx <- data.matrix(xgb_train_2016[,!names(xgb_train_2016)%in%c("outcome", unnecessary)])
+xgb_test_mtx <-  data.matrix(xgb_test_2016[,!names(xgb_test_2016)%in%c("outcome", unnecessary)])
+
+library("xgboost")
+xgb_2016 <- xgboost(data = xgb_train_mtx, label=xgb_train_2016$outcome, objective ="binary:logistic", eta=0.6, max.depth = 50, nthread =10, nrounds =20)
+
+xgb_2016_pred <- predict(xgb_2016, newdata=xgb_test_mtx)
+
+probs_2016 <-cbind(glm_all_2016_pred,glm_step_2016_pred, svm_2016_pred, rf_pred_2016_prob[,2],xgb_2016_pred)
+
+ens_1_2016 <- apply(probs_2016, 1,mean,na.rm=TRUE)
+
+#Making submission
+
+data_2016 <- total_data[total_data$season==2016,]
+
+submission <- data.frame(cbind(data_2016$team, data_2016$opp_team, ens_1_2016))
+
+names(submission) <- c("team", "opp_team","prediction")
+
+submission$prediction<-ifelse(submission$prediction==.5, .51, submission$prediction)
+
+submission$seed <- data_2016$team_seed
+submission$opp_seed <- data_2016$opp_seed
+submission$conf <- as.character(data_2016$team_conf)
+submission$opp_conf <- as.character(data_2016$opp_conf)
+submission <- merge(submission, team_names, all.x= TRUE, all.y=FALSE, by.x="team", by.y="Team_Id")
+submission <- merge(submission, team_names, all.x= TRUE, all.y=FALSE, by.x="opp_team", by.y="Team_Id")
+
+# Removing bubble teams
+# Check late at night to make sure Michigan wins
+bubs <- c(1409,1192,1435,1380)
+submission<- submission[!submission$team%in%bubs,]
+submission<- submission[!submission$opp_team%in%bubs,]
+sum(is.na(submission))
+
+confs <- unique(as.character(submission$conf))
+unique(submission$seed)
+# Getting them together
+
+r2 <- vector()
+r3 <- vector()
+r4 <- vector()
+r5 <- vector()
+r6 <- vector()
+r1_winners <-vector()
+r2_winners <- vector()
+r3_winners <- vector()
+r4_winners <- vector()
+r5_winners <- vector()
+#Interconference play
+for(i in 1:length(confs)){
+  subset <- submission[((submission$conf==confs[i])&(submission$opp_conf==confs[i])),]
+  ########################################
+  #            16 v 1
+  ########################################
+  game <- subset[((subset$seed==16)&(subset$opp_seed==1)),]
+  if(game$prediction[1] > .5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  
+  ########################################
+  #            9 v 8
+  ########################################
+  game <- subset[((subset$seed==9)&(subset$opp_seed==8))|((subset$seed==8)&(subset$opp_seed==9)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  ########################################
+  #           Round 2
+  ########################################
+  r2_game <- subset[(((subset$team==r2[1])&(subset$opp_team==r2[2]))|((subset$team==r2[2])&(subset$opp_team==r2[1]))),]
+  if(r2_game$prediction[1]>.5){
+    r3 <- c(r3, r2_game$team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.x)
+  }
+  else{
+    r3 <- c(r3,r2_game$opp_team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.y)
+  }
+  r2 <- vector()
+  #######################################
+  #           12v 5
+  #######################################
+  game <- subset[((subset$seed==12)&(subset$opp_seed==5))|((subset$seed==5)&(subset$opp_seed==12)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  #######################################
+  #        13 v 4
+  #######################################
+  game <- subset[((subset$seed==13)&(subset$opp_seed==4))|((subset$seed==4)&(subset$opp_seed==13)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  ######################################
+  #     Round 2
+  ######################################
+  r2_game <- subset[(((subset$team==r2[1])&(subset$opp_team==r2[2]))|((subset$team==r2[2])&(subset$opp_team==r2[1]))),]
+  if(r2_game$prediction[1]>.5){
+    r3 <- c(r3, r2_game$team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.x)
+  }
+  else{
+    r3 <- c(r3,r2_game$opp_team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.y)
+  }
+  r2 <- vector()
+  ###################################################
+  # Round 3
+  ###################################################
+  r3_game <- subset[(((subset$team==r3[1])&(subset$opp_team==r3[2]))|((subset$team==r3[2])&(subset$opp_team==r3[1]))),]
+  if(r3_game$prediction[1]>.5){
+    r4 <- c(r4, r3_game$team)
+    r3_winners <- c(r3_winners, r3_game$Team_Name.x)
+  }
+  else{
+    r4 <- c(r4,r3_game$opp_team)
+    r3_winners <- c(r3_winners, r3_game$Team_Name.y)
+  }
+  r3 <-vector()
+  ###################################################
+  #             11 vs 6 
+  ###################################################
+  game <- subset[((subset$seed==11)&(subset$opp_seed==6))|((subset$seed==6)&(subset$opp_seed==11)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  
+  ###################################################
+  #             14 vs 3 
+  ###################################################
+  game <- subset[((subset$seed==14)&(subset$opp_seed==3))|((subset$seed==3)&(subset$opp_seed==14)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  ###################################################
+  #             Round 2 
+  ###################################################
+  r2_game <- subset[(((subset$team==r2[1])&(subset$opp_team==r2[2]))|((subset$team==r2[2])&(subset$opp_team==r2[1]))),]
+  if(r2_game$prediction[1]>.5){
+    r3 <- c(r3, r2_game$team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.x)
+  }
+  else{
+    r3 <- c(r3,r2_game$opp_team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.y)
+  }
+  r2 <- vector()
+  ###################################################
+  #             10 vs 7 
+  ###################################################
+  game <- subset[((subset$seed==10)&(subset$opp_seed==7))|((subset$seed==7)&(subset$opp_seed==10)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  
+  ###################################################
+  #             15 vs 2 
+  ###################################################
+  game <- subset[((subset$seed==15)&(subset$opp_seed==2))|((subset$seed==2)&(subset$opp_seed==15)),]
+  if(game$prediction[1] >.5){
+    r2<- c(r2,game$team)
+    r1_winners <- c(r1_winners, game$Team_Name.x)
+  }
+  else{
+    r2<-c(r2,game$opp_team)
+    r1_winners <- c(r1_winners, game$Team_Name.y)
+  }
+  
+  ###################################################
+  #             Round 2 
+  ###################################################
+  r2_game <- subset[(((subset$team==r2[1])&(subset$opp_team==r2[2]))|((subset$team==r2[2])&(subset$opp_team==r2[1]))),]
+  if(r2_game$prediction[1]>.5){
+    r3 <- c(r3, r2_game$team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.x)
+  }
+  else{
+    r3 <- c(r3,r2_game$opp_team)
+    r2_winners <- c(r2_winners, r2_game$Team_Name.y)
+  }
+  r2 <- vector()
+  ###################################################
+  # Round 3
+  ###################################################
+  r3_game <- subset[(((subset$team==r3[1])&(subset$opp_team==r3[2]))|((subset$team==r3[2])&(subset$opp_team==r3[1]))),]
+  if(r3_game$prediction[1] >.5){
+    r4 <- c(r4, r3_game$team)
+    r3_winners <- c(r3_winners, r3_game$Team_Name.x)
+  }
+  else{
+    r4 <- c(r4,r3_game$opp_team)
+    r3_winners <- c(r3_winners, r3_game$Team_Name.y)
+  }
+  r3 <-vector()
+  ###################################################
+  # Round 4
+  ###################################################
+  r4_game <- subset[(((subset$team==r4[1])&(subset$opp_team==r4[2]))|((subset$team==r4[2])&(subset$opp_team==r4[1]))),]
+  if(r4_game$prediction[1]>.5){
+    r5 <- c(r5, r4_game$team)
+    r4_winners <- c(r4_winners, r4_game$Team_Name.x)
+  }
+  else{
+    r5 <- c(r5,r4_game$opp_team)
+    r4_winners <- c(r4_winners, r4_game$Team_Name.y)
+  }
+  r4 <-vector()
+}
+#################################################
+#  Round 5
+################################################
+
+# Y = South
+# X = midwest
+# Z = West
+# W = East
+# South vs East
+
+r5_game <- submission[(((submission$team==r5[1])&(submission$opp_team==r5[4]))|((submission$team==r5[4])&(submission$opp_team==r5[1]))),]
+# Just wrapping it for a quick fix to r idiosyncracy
+for(i in 1){
+if(r5_game$prediction[1]>.5){
+  r6 <- c(r6, r5_game$team)
+  r5_winners <- c(r5_winners, r5_game$Team_Name.x)
+}
+else{
+  r6 <- c(r6,r5_game$opp_team)
+  r5_winners <- c(r5_winners, r5_game$Team_Name.y)
+}
+}
+# West vs Midwest
+for(i in 1){
+r5_game <- submission[(((submission$team==r5[3])&(submission$opp_team==r5[2]))|((submission$team==r5[2])&(submission$opp_team==r5[3]))),]
+if(r5_game$prediction[1]>.5){
+  r6 <- c(r6, r5_game$team)
+  r5_winners <- c(r5_winners, r5_game$Team_Name.x)
+}
+else{
+  r6 <- c(r6,r5_game$opp_team)
+  r5_winners <- c(r5_winners, r5_game$Team_Name.y)
+}
+}
+r6_winners <- vector()
+#Championship
+r6_game <- submission[(((submission$team==r6[1])&(submission$opp_team==r6[2]))|((submission$team==r6[2])&(submission$opp_team==r6[1]))),]
+for(i in 1){
+if(r6_game$prediction[1]>.5){
+  r6_winners <- c(r6_winners, r6_game$Team_Name.x)
+}
+else{
+  r6_winners <- c(r6_winners, r6_game$Team_Name.y)
+}
+}
+
+r2_extra <- rep(NA, times = (length(r1_winners)-length(r2_winners)))
+r2_winners <- c(r2_winners, r2_extra)
+final_result <- rbind(r1_winners, r2_winners)
+r3_extra <- rep(NA, times = (length(r1_winners)-length(r3_winners)))
+r3_winners <- c(r3_winners, r3_extra)
+final_result <- rbind(final_result, r3_winners)
+r4_extra <- rep(NA, times = (length(r1_winners)-length(r4_winners)))
+r4_winners <- c(r4_winners, r4_extra)
+final_result <- rbind(final_result, r4_winners)
+r5_extra <- rep(NA, times = (length(r1_winners)-length(r5_winners)))
+r5_winners <- c(r5_winners, r5_extra)
+final_result <- rbind(final_result, r5_winners)
+r6_extra <- rep(NA, times = (length(r1_winners)-length(r6_winners)))
+r6_winners <- c(r6_winners, r6_extra)
+final_result <- rbind(final_result, r6_winners)
+
+write.csv(final_result, "marchMadness_predictions2016")
