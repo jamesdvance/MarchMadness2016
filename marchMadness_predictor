@@ -6,8 +6,6 @@
 # related to model selection and data wrangling are shared on github
 
 
-data_2016 <- read.csv("ave_2016.csv")
-
 # Reading in main dataset (pre-wrangled)
 
 total_data <- read.csv("total_data.csv")
@@ -94,7 +92,7 @@ submission<- submission[!submission$opp_team%in%bubs,]
 sum(is.na(submission))
 
 confs <- unique(as.character(submission$conf))
-unique(submission$seed)
+
 # Getting them together
 
 r2 <- vector()
