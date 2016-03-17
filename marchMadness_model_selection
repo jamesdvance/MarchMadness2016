@@ -1,0 +1,376 @@
+# Set working directory
+setwd("C:/Users/jvance5/Desktop/Career_Development/March Madness/march-machine-learning-mania-2016-v1")
+# Read in average-based data
+model_data <- read.csv("ave_metrics_model.csv")
+# Sourcing in a function
+source("acu_calc_pred.R")
+
+# Global variables
+accuracies_2013 <- vector()
+accuracies_2014 <- vector()
+accuracies_2015 <- vector()
+
+preds_2013 <- vector()
+preds_2014 <- vector()
+preds_2015 <- vector()
+
+#probs_2013 <- data.frame()
+#probs_2014 <- data.frame()
+#probs_2015 <- data.frame()
+
+# Everyday I'm shuffling...
+shuffled_data <- model_data[sample(nrow(model_data)),]
+head(shuffled_data$outcome)
+model_data <- shuffled_data
+
+# Glm data
+glm_model_data <- model_data
+glm_uncessessary <- c("team_id", "opp_team_id", "season", "team","opp_team", "diff")
+
+#SVM data
+svm_model_data <-model_data
+svm_uncessessary <- c("team_id", "opp_team_id", "season", "team","opp_team", "diff")
+
+# RF model data
+rf_model_data <- model_data
+rf_model_data$outcome <- as.factor(rf_model_data$outcome)
+rf_uncessessary <- c("team_id", "opp_team_id", "season", "team","opp_team", "diff")
+
+# XGB model data
+xgb_model_data <- model_data
+opp_conf_dum <- dummy(xgb_model_data$opp_conf, data =NULL, sep="_")
+team_conf_dum <- dummy(xgb_model_data$team_conf, data = NULL, sep = "_")
+xgb_model_data$opp_conf <- NULL
+xgb_model_data$team_conf <- NULL
+xgb_model_data <- cbind(xgb_model_data, opp_conf_dum, team_conf_dum)
+xgb_unnecessary <- c("team_id", "opp_team_id", "season", "team","opp_team", "diff")
+xgb_outcome <- xgb_model_data$outcome
+
+# GLM Model Building
+# Training / Testing 2013
+train_2013 <- glm_model_data[glm_model_data$season <2013,!names(glm_model_data)%in%c(glm_uncessessary)]
+test_2013 <- glm_model_data[glm_model_data$season ==2013,!names(glm_model_data)%in%c(glm_uncessessary)]
+# Training / Testing 2014
+train_2014 <- glm_model_data[glm_model_data$season <2014,!names(glm_model_data)%in%c(glm_uncessessary)]
+test_2014 <- glm_model_data[glm_model_data$season ==2014,!names(glm_model_data)%in%c(glm_uncessessary)]
+# Training / Testing 2013
+train_2015 <- glm_model_data[glm_model_data$season <2015,!names(glm_model_data)%in%c(glm_uncessessary)]
+test_2015 <- glm_model_data[glm_model_data$season ==2015,!names(glm_model_data)%in%c(glm_uncessessary)]
+
+# GLM general
+
+# All Variables
+# 2013
+glm_all_2013 <- glm(outcome ~ ., data = train_2013,family="binomial")
+
+glm_all_2013_pred <- predict(glm_all_2013, newdata=test_2013[,!(names(test_2013)%in%c("diff","outcome"))], type = "response")
+
+glm_all_2013_pred_ac <- acu_calc_pred(pred=glm_all_2013_pred, true=as.numeric(test_2013$outcome))
+
+accuracies_2013 <- c(accuracies_2013 , glm_all_2013_pred_ac[1])
+preds_2013 <- c(preds_2013, glm_all_2013_pred_ac[2])
+probs_2013 <- data.frame(glm_all_2013_pred )
+
+#2014
+glm_all_2014 <- glm(outcome ~ ., data = train_2014,family="binomial")
+
+glm_all_2014_pred <- predict(glm_all_2014, newdata=test_2014[,!(names(test_2014)%in%c("diff","outcome"))], type = "response")
+
+glm_all_2014_pred_ac <- acu_calc_pred(pred=glm_all_2014_pred, true=as.numeric(test_2014$outcome))
+
+accuracies_2014 <- c(accuracies_2014 , glm_all_2014_pred_ac[1])
+preds_2014 <- c(preds_2014, glm_all_2014_pred_ac[2])
+probs_2014 <- data.frame(glm_all_2014_pred)
+
+#2015
+glm_all_2015 <- glm(outcome ~ ., data = train_2015,family="binomial")
+
+glm_all_2015_pred <- predict(glm_all_2015, newdata=test_2015[,!(names(test_2015)%in%c("diff","outcome"))], type = "response")
+
+glm_all_2015_pred_ac <- acu_calc_pred(pred=glm_all_2015_pred, true=as.numeric(test_2015$outcome))
+
+accuracies_2015 <- c(accuracies_2015, glm_all_2015_pred_ac[1])
+preds_2015 <- c(preds_2015, glm_all_2015_pred_ac[2])
+probs_2015 <- data.frame( glm_all_2015_pred)
+
+# Stepwise glm model building
+# 2013 
+glm_step_2013 <- step(glm_all_2013)
+
+glm_step_2013_pred <- predict(glm_step_2013, newdata=test_2013[,!(names(test_2013)%in%c("diff","outcome"))], type = "response")
+
+glm_step_2013_pred_ac <- acu_calc_pred(pred=glm_step_2013_pred, true= test_2013$outcome)
+
+accuracies_2013 <- c(accuracies_2013 , glm_step_2013_pred_ac[1])
+preds_2013 <- c(preds_2013, glm_step_2013_pred_ac[2])
+probs_2013 <- cbind(probs_2013,  glm_step_2013_pred)
+
+
+# 2014
+glm_step_2014 <- step(glm_all_2014)
+
+glm_step_2014_pred <- predict(glm_step_2014, newdata=test_2014[,!(names(test_2014)%in%c("diff","outcome"))], type = "response")
+
+glm_step_2014_pred_ac <- acu_calc_pred(pred=glm_step_2014_pred, true= test_2014$outcome)
+accuracies_2014 <- c(accuracies_2014 , glm_step_2014_pred_ac[1])
+preds_2014 <- c(preds_2014, glm_step_2014_pred_ac[2])
+probs_2014 <- cbind(probs_2014,  glm_step_2014_pred)
+
+# 2015
+glm_step_2015 <- step(glm_all_2015)
+
+glm_step_2015_pred <- predict(glm_step_2015, newdata=test_2015[,!(names(test_2014)%in%c("diff","outcome"))], type = "response")
+
+glm_step_2015_pred_ac <- acu_calc_pred(pred=glm_step_2015_pred, true= test_2015$outcome)
+
+accuracies_2015 <- c(accuracies_2015 , glm_step_2015_pred_ac[1])
+preds_2015 <- c(preds_2015, glm_step_2015_pred_ac[2])
+probs_2015 <- cbind(probs_2015,  glm_step_2015_pred)
+
+# PCA glm model building
+# glm_pca_2013 <- princomp(glm_all_2013)
+
+# SVM Model Building
+#install.packages("e1071")
+library("e1071")
+# Training / Testing 2013
+train_2013 <- svm_model_data[svm_model_data$season <2013,!names(svm_model_data)%in%c(svm_uncessessary)]
+test_2013 <- svm_model_data[svm_model_data$season ==2013,!names(svm_model_data)%in%c(svm_uncessessary)]
+# Training / Testing 2014
+train_2014 <- svm_model_data[svm_model_data$season <2014,!names(svm_model_data)%in%c(svm_uncessessary)]
+test_2014 <- svm_model_data[svm_model_data$season ==2014,!names(svm_model_data)%in%c(svm_uncessessary)]
+# Training / Testing 2013
+train_2013 <- svm_model_data[svm_model_data$season <2013,!names(svm_model_data)%in%c(svm_uncessessary)]
+test_2013 <- svm_model_data[svm_model_data$season ==2013,!names(svm_model_data)%in%c(svm_uncessessary)]
+#2013
+svm_all_2013 <- svm(outcome~., data = train_2013)
+svm_2013_pred <- predict(svm_all_2013, newdata=test_2013[,!(names(test_2013)%in%c("diff","outcome"))], probability = TRUE)
+
+svm_2013_pred_ac <- acu_calc_pred(pred=svm_2013_pred, true= test_2013$outcome)
+accuracies_2013 <- c(accuracies_2013, svm_2013_pred_ac[1])
+preds_2013 <- c(preds_2013, svm_2013_pred_ac[2])
+probs_2013 <- cbind(probs_2013,  svm_2013_pred)
+
+#2014
+svm_all_2014 <- svm(outcome~., data = train_2014)
+svm_2014_pred <- predict(svm_all_2014, newdata=test_2014[,!(names(test_2014)%in%c("diff","outcome"))],  probability = TRUE)
+
+svm_2014_pred_ac <- acu_calc_pred(pred=svm_2014_pred, true= test_2014$outcome)
+accuracies_2014 <- c(accuracies_2014, svm_2014_pred_ac[1])
+preds_2014 <- c(preds_2014, svm_2014_pred_ac[2])
+probs_2014 <- cbind(probs_2014,  svm_2014_pred)
+
+#2015
+svm_all_2015 <- svm(outcome~., data = train_2015)
+svm_2015_pred <- predict(svm_all_2015, newdata=test_2015[,!(names(test_2015)%in%c("diff","outcome"))],  probability = TRUE)
+svm_2015_pred_ac <- acu_calc_pred(pred=svm_2015_pred, true= test_2015$outcome)
+accuracies_2015 <- c(accuracies_2015, svm_2015_pred_ac[1])
+preds_2015 <- c(preds_2015, svm_2015_pred_ac[2])
+probs_2015 <- cbind(probs_2015,  svm_2015_pred)
+
+# Random Forest
+#install.packages("randomForest")
+library("randomForest")
+
+# Training / Testing 2013
+train_2013 <- rf_model_data[rf_model_data$season <2013,!names(rf_model_data)%in%c(rf_uncessessary)]
+test_2013 <- rf_model_data[rf_model_data$season ==2013,!names(rf_model_data)%in%c(rf_uncessessary)]
+# Training / Testing 2014
+train_2014 <- rf_model_data[rf_model_data$season <2014,!names(rf_model_data)%in%c(rf_uncessessary)]
+test_2014 <- rf_model_data[rf_model_data$season ==2014,!names(rf_model_data)%in%c(rf_uncessessary)]
+# Training / Testing 2015
+train_2015 <- rf_model_data[rf_model_data$season <2015,!names(rf_model_data)%in%c(rf_uncessessary)]
+test_2015 <- rf_model_data[rf_model_data$season ==2015,!names(rf_model_data)%in%c(rf_uncessessary)]
+
+# 2013
+rf_all_2013 <- randomForest(outcome~., data=train_2013)
+
+rf_pred_2013_prob <- predict(rf_all_2013, newdata=test_2013[,!(names(test_2013)%in%c("diff","outcome"))], type = "prob")
+
+rf_2013_pred_ac <- acu_calc_pred(pred=as.numeric(rf_pred_2013_prob[,2]), as.numeric(as.character(test_2013$outcome)))
+
+accuracies_2013 <- c(accuracies_2013,rf_2013_pred_ac[1])
+preds_2013 <- c(preds_2013,rf_2013_pred_ac[2])
+probs_2013 <-cbind(probs_2013, rf_pred_2013_prob[,2])
+# 2014
+rf_all_2014 <- randomForest(outcome~., data=train_2014)
+
+rf_pred_2014_prob <- predict(rf_all_2014, newdata=test_2014[,!(names(test_2014)%in%c("diff","outcome"))], type = "prob")
+
+rf_2014_pred_ac <- acu_calc_pred(pred=as.numeric(rf_pred_2014_prob[,2]), as.numeric(as.character(test_2014$outcome)))
+
+accuracies_2014 <- c(accuracies_2014,rf_2014_pred_ac[1])
+preds_2014 <- c(preds_2014,rf_2014_pred_ac[2])
+probs_2014 <-cbind(probs_2014, rf_pred_2014_prob[,2])
+
+# 2015
+rf_all_2015 <- randomForest(outcome~., data=train_2015)
+
+rf_pred_2015_prob <- predict(rf_all_2015, newdata=test_2015[,!(names(test_2015)%in%c("diff","outcome"))], type = "prob")
+
+rf_2015_pred_ac <- acu_calc_pred(pred=as.numeric(rf_pred_2015_prob[,2]), as.numeric(as.character(test_2015$outcome)))
+
+accuracies_2015 <- c(accuracies_2015,rf_2015_pred_ac[1])
+preds_2015 <- c(preds_2015,rf_2015_pred_ac[2])
+probs_2015 <-cbind(probs_2015, rf_pred_2015_prob[,2])
+
+# XGBoost
+#install.packages("xgboost")
+library('xgboost')
+
+#install.packages("dummies")
+library("dummies")
+
+# Training / Testing 2013
+train_2013_label <- xgb_model_data$outcome[xgb_model_data$season <2013]
+xgb_train_2013 <- xgb_model_data[xgb_model_data$season <2013,!names(xgb_model_data)%in%c(xgb_unnecessary)]
+test_2013_label <- xgb_model_data[xgb_model_data$season ==2013,names(xgb_model_data)%in%c("outcome")]
+xgb_test_2013 <- xgb_model_data[xgb_model_data$season ==2013,!names(xgb_model_data)%in%c(xgb_unnecessary)]
+
+# Training / Testing 2014
+train_2014_label <- xgb_model_data$outcome[xgb_model_data$season <2014]
+xgb_train_2014 <- xgb_model_data[xgb_model_data$season <2014,!names(xgb_model_data)%in%c(xgb_unnecessary)]
+test_2014_label <- xgb_model_data[xgb_model_data$season ==2014,names(xgb_model_data)%in%c("outcome")]
+xgb_test_2014 <- xgb_model_data[xgb_model_data$season ==2014,!names(xgb_model_data)%in%c(xgb_unnecessary)]
+
+# Training / Testing 2013
+train_2015_label <- xgb_model_data$outcome[xgb_model_data$season <2015]
+xgb_train_2015 <- xgb_model_data[xgb_model_data$season <2015,!names(xgb_model_data)%in%c(xgb_unnecessary)]
+test_2015_label <- xgb_model_data[xgb_model_data$season ==2015,names(xgb_model_data)%in%c("outcome")]
+xgb_test_2015 <- xgb_model_data[xgb_model_data$season ==2015,!names(xgb_model_data)%in%c(xgb_unnecessary)]
+
+#2013
+xgb_train_mtx <- data.matrix(xgb_train_2013[,!names(xgb_train_2013)%in%c("outcome", xgb_unnecessary)])
+xgb_test_mtx <-  data.matrix(xgb_test_2013[,!names(xgb_test_2013)%in%c("outcome", xgb_unnecessary)])
+
+xgb_2013 <- xgboost(data = xgb_train_mtx, label=train_2013_label, objective ="binary:logistic", eta
+                    =0.6, max.depth = 50, nthread =10, nrounds =20)
+
+xgb_2013_pred <- predict(xgb_2013, newdata=xgb_test_mtx)
+
+xgb_2013_pred_ac <- acu_calc_pred(pred= xgb_2013_pred, true= test_2013_label)
+
+accuracies_2013 <- c(accuracies_2013,rf_2013_pred_ac[1])
+preds_2013 <- c(preds_2013,xgb_2013_pred_ac[2])
+probs_2013 <-cbind(probs_2013, xgb_2013_pred)
+
+
+#2014
+xgb_train_mtx <- data.matrix(xgb_train_2014[,!names(xgb_train_2014)%in%c("outcome", xgb_unnecessary)])
+xgb_test_mtx <-  data.matrix(xgb_test_2014[,!names(xgb_test_2014)%in%c("outcome", xgb_unnecessary)])
+
+xgb_2014 <- xgboost(data = xgb_train_mtx, label=train_2014_label, objective ="binary:logistic", eta
+                    =0.6, max.depth = 50, nthread =10, nrounds =20)
+
+xgb_2014_pred <- predict(xgb_2014, newdata=xgb_test_mtx)
+
+xgb_2014_pred_ac <- acu_calc_pred(pred= xgb_2014_pred, true= test_2014_label)
+
+accuracies_2014 <- c(accuracies_2014,xgb_2014_pred_ac[1])
+preds_2014 <- c(preds_2014,xgb_2014_pred_ac[2])
+probs_2014 <-cbind(probs_2014, xgb_2014_pred)
+
+
+#2015 
+xgb_train_mtx <- data.matrix(xgb_train_2015[,!names(xgb_train_2015)%in%c("outcome", xgb_unnecessary)])
+xgb_test_mtx <-  data.matrix(xgb_test_2015[,!names(xgb_test_2015)%in%c("outcome", xgb_unnecessary)])
+
+xgb_2015 <- xgboost(data = xgb_train_mtx, label=train_2015_label, objective ="binary:logistic", eta
+                    =0.6, max.depth = 50, nthread =10, nrounds =20)
+
+xgb_2015_pred <- predict(xgb_2015, newdata=xgb_test_mtx)
+
+xgb_2015_pred_ac <- acu_calc_pred(pred= xgb_2015_pred, true= test_2015_label)
+
+accuracies_2015 <- c(accuracies_2015,xgb_2015_pred_ac[1])
+preds_2015 <- c(preds_2015,xgb_2015_pred_ac[2])
+probs_2015 <-cbind(probs_2015, xgb_2015_pred)
+
+# Top single model
+max(accuracies_2013)
+names(probs_2013[match(max(accuracies_2013),accuracies_2013)])
+# Stepwise glm - .74
+names(probs_2013[match(min(accuracies_2013),accuracies_2013)])
+# Random forest is the worst
+
+max(accuracies_2014)
+names(probs_2014[match(max(accuracies_2014),accuracies_2014)])
+# Stepwise glm - .67
+names(probs_2014[match(min(accuracies_2014),accuracies_2014)])
+# SVM is worst
+max(accuracies_2015)
+names(probs_2015[match(max(accuracies_2015),accuracies_2015)])
+names(probs_2015[match(min(accuracies_2015),accuracies_2015)])
+# Stepwise glm -.74
+
+# Ensemble 1 - average of all
+
+ens_1_2013 <- apply(probs_2013, 1,mean,na.rm=TRUE)
+
+ens_1_ac_2013 <- acu_calc_pred(ens_1_2013, as.numeric(as.character(test_2013$outcome)))
+# .71
+ens_1_2014 <- apply(probs_2014, 1,mean,na.rm=TRUE)
+
+ens_1_ac_2014 <- acu_calc_pred(ens_1_2014, as.numeric(as.character(test_2014$outcome)))
+# .62
+ens_1_2015 <- apply(probs_2015, 1,mean,na.rm=TRUE)
+
+ens_1_ac_2015 <- acu_calc_pred(ens_1_2015, as.numeric(as.character(test_2015$outcome)))
+# .76 - best so far
+# Ensemble 2 - all but svm (it seems to not be outputting probabilities)
+names(probs_2013)[3]
+ens2_df_2013 <- probs_2013[,-3]
+ens2_df_2014 <- probs_2014[,-3]
+ens2_df_2015 <- probs_2015[,-3]
+
+ens_2_2013 <- apply(ens2_df_2013, 1,mean,na.rm=TRUE)
+
+ens_2_ac_2013 <- acu_calc_pred(ens_2_2013, as.numeric(as.character(test_2013$outcome)))
+#.71
+ens_2_2014 <- apply(ens2_df_2014, 1,mean,na.rm=TRUE)
+
+ens_2_ac_2014 <- acu_calc_pred(ens_2_2014, as.numeric(as.character(test_2014$outcome)))
+# .64
+ens_2_2015 <- apply(ens2_df_2015, 1,mean,na.rm=TRUE)
+
+ens_2_ac_2015 <- acu_calc_pred(ens_2_2015, as.numeric(as.character(test_2015$outcome)))
+#.74
+# Ensemble 3 - without general glm
+
+ens3_df_2013 <- probs_2013[,-1]
+ens3_df_2014 <- probs_2014[,-1]
+ens3_df_2015 <- probs_2015[,-1]
+
+ens_3_2013 <- apply(ens3_df_2013, 1,mean,na.rm=TRUE)
+
+ens_3_ac_2013 <- acu_calc_pred(ens_3_2013, as.numeric(as.character(test_2013$outcome)))
+
+ens_3_2014 <- apply(ens3_df_2014, 1,mean,na.rm=TRUE)
+
+ens_3_ac_2014 <- acu_calc_pred(ens_3_2014, as.numeric(as.character(test_2014$outcome)))
+
+ens_3_2015 <- apply(ens3_df_2015, 1,mean,na.rm=TRUE)
+
+ens_3_ac_2015 <- acu_calc_pred(ens_3_2015, as.numeric(as.character(test_2015$outcome)))
+
+
+# Ensemble 4: Flat voting ensemble - most accurate model gets 2 extra votes
+
+
+ens4_df_2013 <- probs_2013
+ens4_df_2014 <- probs_2014
+ens4_df_2015 <- probs_2015
+
+ens4_df_2013[ens4_df_2013>=.6] <-1
+ens4_df_2014[ens4_df_2014>=.6] <-1
+ens4_df_2015[ens4_df_2015 >=.6]<-1
+
+ens4_df_2013[ens4_df_2013<.6] <-0
+ens4_df_2014[ens4_df_2014<.6] <-0
+ens4_df_2015[ens4_df_2015<.6]<-0
+
+ens4_df_2013$step2 <- ens4_df_2013$glm_step_2013_pred
+ens4_df_2013$step3 <- ens4_df_2013$glm_step_2013_pred
+
+ens_4_2013 <- apply(ens4_df_2013,1,function(x){round(sum(x==1)/8,digits=0)})
+# .65, so bad not worth continuing
